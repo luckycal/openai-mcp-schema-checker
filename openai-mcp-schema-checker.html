@@ -187,31 +187,42 @@ const editor = document.getElementById('editor');
 const sample = {
   type: 'object',
   properties: {
-    queries: {
-      type: 'array',
-      items: {
-        type: 'object',
-        minProperties: 1,
-        properties: {
-          googlePlaceId: { type: 'string' },
-          hotelKey: { type: 'string' },
-          nameSearch: {
-            type: 'object',
-            properties: {
-              hotelName: { type: 'string' },
-              latitude: { type: 'number' },
-              longitude: { type: 'number' },
-              brand: { type: 'string' }
-            },
-            required: ['hotelName','latitude','longitude']
+    title: {
+      type: 'string'
+    },
+    priority: {
+      type: 'integer'
+    },
+    dueDate: {
+      type: 'string',
+      format: 'date'
+    },
+    metadata: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string'
+        },
+        tags: {
+          type: 'array',
+          items: {
+            type: 'string'
           }
         }
-      }
+      },
+      required: ['owner'],
+      minProperties: 1
+    },
+    mode: {
+      oneOf: [
+        { const: 'quick' },
+        { const: 'full' }
+      ]
     }
   },
-  required: ['queries'],
-  additionalProperties: false
-};
+  required: ['title'],
+  additionalProperties: true
+}; 
 editor.value = JSON.stringify(sample, null, 2);
 function pathJoin(base, key) { return base === '$' ? '$.' + key : base + '.' + key; }
 function isObjSchema(s) { const t=s&&s.type; return t==='object' || (Array.isArray(t)&&t.includes('object')) || !!(s&&s.properties); }
