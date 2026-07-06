@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenAI Strict Tool Schema Checker</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel2: #1e232d;
+      --text: #eef2f8;
+      --muted: #a9b3c2;
+      --border: #303746;
+      --accent: #8ab4ff;
+      --bad: #ff6b6b;
+      --warn: #ffd166;
+      --info: #7bd88f;
+      --code: #0b0d12;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    header {
+      padding: 22px 28px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #171a21 0%, #11141a 100%);
+    }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    header p { margin: 0; color: var(--muted); max-width: 960px; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
+      gap: 16px;
+      padding: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .panel h2 {
+      margin: 0;
+      padding: 14px 16px;
+      font-size: 15px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel2);
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    button, label.file-btn, select {
+      border: 1px solid var(--border);
+      background: #232936;
+      color: var(--text);
+      border-radius: 9px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover, label.file-btn:hover, select:hover { border-color: var(--accent); }
+    button.primary { background: #244a80; border-color: #386aa8; }
+    button.danger { background: #442024; border-color: #7a333b; }
+    input[type=file] { display: none; }
+    textarea {
+      width: 100%;
+      height: 68vh;
+      resize: vertical;
+      border: 0;
+      outline: none;
+      color: #e8eef8;
+      background: var(--code);
+      padding: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      tab-size: 2;
+    }
+    .status {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 12px;
+    }
+    .card {
+      background: #11141a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .metric { font-size: 26px; font-weight: 750; }
+    .label { color: var(--muted); font-size: 12px; }
+    .findings { padding: 12px; display: grid; gap: 10px; max-height: 58vh; overflow: auto; }
+    .finding {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: #11141a;
+    }
+    .finding.error { border-left: 4px solid var(--bad); }
+    .finding.warning { border-left: 4px solid var(--warn); }
+    .finding.info { border-left: 4px solid var(--info); }
+    .sev { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .error .sev { color: var(--bad); }
+    .warning .sev { color: var(--warn); }
+    .info .sev { color: var(--info); }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--code);
+      color: #dfe8f7;
+      border-radius: 8px;
+    }
+    code { padding: 2px 5px; }
+    pre { padding: 12px; overflow: auto; margin: 0; white-space: pre-wrap; }
+    .path { color: var(--accent); word-break: break-word; }
+    .suggestion { color: var(--muted); margin-top: 8px; }
+    .tabs { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .tab.active { background: #244a80; border-color: #386aa8; }
+    .tab-content { display: none; padding: 12px; }
+    .tab-content.active { display: block; }
+    .history-row {
+      display: flex; justify-content: space-between; gap: 10px; align-items: center;
+      border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; background: #11141a;
+    }
+    .history-row strong { display:block; font-size: 13px; }
+    .history-row span { color: var(--muted); font-size: 12px; }
+    .small { font-size: 12px; color: var(--muted); }
+    .empty { color: var(--muted); padding: 18px; text-align: center; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } textarea { height: 50vh; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>OpenAI Strict Tool Schema Checker</h1>
+  <p>Paste a JSON Schema or OpenAI function parameters schema. Everything runs locally in your browser. Schemas are saved only to this browser via IndexedDB.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>Schema</h2>
+    <div class="toolbar">
+      <button class="primary" id="lintBtn">Lint</button>
+      <button id="formatBtn">Format</button>
+      <button id="safeFixBtn">Apply safe fixes</button>
+      <button id="sampleBtn">Load sample</button>
+      <label class="file-btn" for="fileInput">Upload JSON</label>
+      <input id="fileInput" type="file" accept="application/json,.json" />
+      <button id="saveBtn">Save locally</button>
+    </div>
+    <textarea id="editor" spellcheck="false" placeholder="Paste schema JSON here..."></textarea>
+  </section>
+  <section class="panel">
+    <h2>Results</h2>
+    <div class="status">
+      <div class="card"><div class="metric" id="score">—</div><div class="label">Score</div></div>
+      <div class="card"><div class="metric" id="errors">0</div><div class="label">Errors</div></div>
+      <div class="card"><div class="metric" id="warnings">0</div><div class="label">Warnings</div></div>
+      <div class="card"><div class="metric" id="infos">0</div><div class="label">Info</div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="findingsTab">Findings</button>
+      <button class="tab" data-tab="signatureTab">Signature view</button>
+      <button class="tab" data-tab="jsonTab">JSON output</button>
+      <button class="tab" data-tab="historyTab">Local history</button>
+    </div>
+    <div id="findingsTab" class="tab-content active"><div id="findings" class="findings"></div></div>
+    <div id="signatureTab" class="tab-content"><pre id="signature">No schema linted yet.</pre></div>
+    <div id="jsonTab" class="tab-content"><pre id="jsonOut">[]</pre></div>
+    <div id="historyTab" class="tab-content"><div class="toolbar"><button id="exportBtn">Export history</button><button class="danger" id="clearHistoryBtn">Clear history</button></div><div id="history"></div></div>
+  </section>
+</main>
+<script>
+const DB_NAME = 'openai-schema-checken';
+const STORE = 'schemas';
+const unsupportedOrRisky = new Set(['minProperties','maxProperties','patternProperties','propertyNames','dependencies','dependentRequired','dependentSchemas','if','then','else','not','contains','minContains','maxContains','unevaluatedProperties','unevaluatedItems','default','format']);
+const compositional = new Set(['oneOf','anyOf','allOf']);
+const editor = document.getElementById('editor');
+const sample = {
+  type: 'object',
+  properties: {
+    queries: {
+      type: 'array',
+      items: {
+        type: 'object',
+        minProperties: 1,
+        properties: {
+          googlePlaceId: { type: 'string' },
+          hotelKey: { type: 'string' },
+          nameSearch: {
+            type: 'object',
+            properties: {
+              hotelName: { type: 'string' },
+              latitude: { type: 'number' },
+              longitude: { type: 'number' },
+              brand: { type: 'string' }
+            },
+            required: ['hotelName','latitude','longitude']
+          }
+        }
+      }
+    }
+  },
+  required: ['queries'],
+  additionalProperties: false
+};
+editor.value = JSON.stringify(sample, null, 2);
+function pathJoin(base, key) { return base === '$' ? '$.' + key : base + '.' + key; }
+function isObjSchema(s) { const t=s&&s.type; return t==='object' || (Array.isArray(t)&&t.includes('object')) || !!(s&&s.properties); }
+function isArraySchema(s) { const t=s&&s.type; return t==='array' || (Array.isArray(t)&&t.includes('array')); }
+function typeName(s) { if (!s) return 'any'; if (Array.isArray(s.type)) return s.type.filter(x=>x!=='null').join('|') + (s.type.includes('null')?' | null':''); return s.type || (s.enum?'enum':'any'); }
+function nullable(s){ return Array.isArray(s&&s.type) && s.type.includes('null'); }
+function lint(schema) {
+  const findings=[];
+  function add(severity,path,message,suggestion){ findings.push({severity,path,message,suggestion}); }
+  function visit(node,path){
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    for (const key of Object.keys(node)) {
+      if (unsupportedOrRisky.has(key)) add('warning', pathJoin(path,key), `Keyword "${key}" is outside the clean OpenAI strict-tool subset or is risky for model-facing signatures.`, key==='default'?'Remove default; apply defaults in runtime after parsing.':'Prefer explicit required fields, nullable values, enums, arrays, and plain nested objects.');
+      if (compositional.has(key)) add('warning', pathJoin(path,key), `Compositional keyword "${key}" may be rejected, flattened, or produce poor tool signatures.`, 'Prefer separate tools, or use an explicit discriminator plus nullable fields and runtime validation.');
+    }
+    if (isObjSchema(node)) {
+      if (node.additionalProperties !== false) add('error', path, 'Object schema must set additionalProperties: false.', 'Add "additionalProperties": false to this object schema.');
+      const props = node.properties || {}; const propNames = Object.keys(props); const req = Array.isArray(node.required) ? node.required : [];
+      if (propNames.length && !Array.isArray(node.required)) add('error', pathJoin(path,'required'), 'Object schema with properties must include a required array containing every property.', 'Set required to ' + JSON.stringify(propNames) + '.');
+      for (const p of propNames) if (!req.includes(p)) add('error', pathJoin(path,'properties.'+p), `Property "${p}" is listed in properties but not in required.`, `Add "${p}" to required. If logically optional, make its type nullable, e.g. "type": ["string", "null"].`);
+      for (const r of req) if (!propNames.includes(r)) add('warning', pathJoin(path,'required'), `Required field "${r}" is not present in properties.`, `Remove "${r}" from required or add it to properties.`);
+      for (const [p, ps] of Object.entries(props)) visit(ps, pathJoin(path,'properties.'+p));
+    }
+    if (isArraySchema(node)) {
+      if (!node.items) add('error', pathJoin(path,'items'), 'Array schema must define items.', 'Add an items schema.'); else visit(node.items, pathJoin(path,'items'));
+    }
+    for (const key of compositional) if (Array.isArray(node[key])) node[key].forEach((child,i)=>visit(child, `${path}.${key}[${i}]`));
+  }
+  visit(schema,'$');
+  return findings;
+}
+function applySafeFixes(schema) {
+  function fix(node){
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    if (isObjSchema(node)) {
+      node.additionalProperties = false;
+      const props = node.properties || {};
+      if (Object.keys(props).length) node.required = Object.keys(props);
+      Object.values(props).forEach(fix);
+    }
+    if (isArraySchema(node) && node.items) fix(node.items);
+    for (const key of compositional) if (Array.isArray(node[key])) node[key].forEach(fix);
+  }
+  const copy = structuredClone(schema); fix(copy); return copy;
+}
+function signature(schema, name='tool') {
+  function render(s, indent){
+    if (!s) return 'any';
+    if (isObjSchema(s)) {
+      const props=s.properties||{};
+      const lines=Object.entries(props).map(([k,v]) => `${' '.repeat(indent+2)}${k}: ${render(v, indent+2)}`);
+      return `{\n${lines.join(',\n')}\n${' '.repeat(indent)}}`;
+    }
+    if (isArraySchema(s)) return `Array<${render(s.items, indent)}>`;
+    if (s.enum) return s.enum.map(JSON.stringify).join(' | ');
+    return typeName(s);
+  }
+  return `${name}(${render(schema,0)})`;
+}
+function parseEditor(){ return JSON.parse(editor.value); }
+function render(){
+  let schema, findings;
+  try { schema=parseEditor(); findings=lint(schema); }
+  catch(e){ findings=[{severity:'error', path:'$', message:'Invalid JSON: '+e.message, suggestion:'Fix the JSON syntax and rerun.'}]; }
+  const counts = {error:0, warning:0, info:0}; findings.forEach(f=>counts[f.severity]++);
+  const score = Math.max(0, 100 - counts.error*20 - counts.warning*5);
+  document.getElementById('score').textContent = findings.length ? score : 100;
+  document.getElementById('errors').textContent = counts.error;
+  document.getElementById('warnings').textContent = counts.warning;
+  document.getElementById('infos').textContent = counts.info;
+  const box=document.getElementById('findings');
+  box.innerHTML = findings.length ? findings.map(f=>`<div class="finding ${f.severity}"><div class="sev">${f.severity}</div><div class="path"><code>${escapeHtml(f.path)}</code></div><div>${escapeHtml(f.message)}</div>${f.suggestion?`<div class="suggestion">Fix: ${escapeHtml(f.suggestion)}</div>`:''}</div>`).join('') : '<div class="empty">No findings. This schema matches the linter\'s strict subset checks.</div>';
+  document.getElementById('jsonOut').textContent = JSON.stringify(findings, null, 2);
+  document.getElementById('signature').textContent = schema ? signature(schema, 'tool') : 'No valid schema.';
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function openDb(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME,1); r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:'id'}); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function saveLocal(){ const db=await openDb(); const tx=db.transaction(STORE,'readwrite'); const schemaText=editor.value; tx.objectStore(STORE).put({id: crypto.randomUUID(), createdAt: new Date().toISOString(), schemaText}); await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error)}); await loadHistory(); }
+async function loadHistory(){ const db=await openDb(); const tx=db.transaction(STORE,'readonly'); const req=tx.objectStore(STORE).getAll(); req.onsuccess=()=>{ const rows=req.result.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)); document.getElementById('history').innerHTML = rows.length ? rows.map(r=>`<div class="history-row"><div><strong>${new Date(r.createdAt).toLocaleString()}</strong><span>${escapeHtml((r.schemaText||'').slice(0,90)).replace(/\n/g,' ')}...</span></div><div><button data-load="${r.id}">Load</button><button class="danger" data-del="${r.id}">Delete</button></div></div>`).join('') : '<div class="empty">No locally saved schemas yet.</div>'; }; }
+async function getAllHistory(){ const db=await openDb(); return new Promise((res,rej)=>{const req=db.transaction(STORE,'readonly').objectStore(STORE).getAll(); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error);}); }
+document.getElementById('lintBtn').onclick=render;
+document.getElementById('formatBtn').onclick=()=>{ const s=parseEditor(); editor.value=JSON.stringify(s,null,2); render(); };
+document.getElementById('sampleBtn').onclick=()=>{ editor.value=JSON.stringify(sample,null,2); render(); };
+document.getElementById('safeFixBtn').onclick=()=>{ const s=parseEditor(); editor.value=JSON.stringify(applySafeFixes(s),null,2); render(); };
+document.getElementById('saveBtn').onclick=saveLocal;
+document.getElementById('fileInput').onchange=async e=>{ const f=e.target.files[0]; if(f){ editor.value=await f.text(); render(); } };
+document.getElementById('exportBtn').onclick=async()=>{ const data=await getAllHistory(); const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='openai-schema-checken-history.json'; a.click(); URL.revokeObjectURL(a.href); };
+document.getElementById('clearHistoryBtn').onclick=async()=>{ if(!confirm('Clear all local schema history in this browser?')) return; const db=await openDb(); db.transaction(STORE,'readwrite').objectStore(STORE).clear(); setTimeout(loadHistory,100); };
+document.getElementById('history').onclick=async e=>{ const id=e.target.dataset.load || e.target.dataset.del; if(!id) return; const db=await openDb(); if(e.target.dataset.load){ const req=db.transaction(STORE,'readonly').objectStore(STORE).get(id); req.onsuccess=()=>{ editor.value=req.result.schemaText; render(); }; } else { db.transaction(STORE,'readwrite').objectStore(STORE).delete(id); setTimeout(loadHistory,100); } };
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ document.querySelectorAll('.tab,.tab-content').forEach(x=>x.classList.remove('active')); b.classList.add('active'); document.getElementById(b.dataset.tab).classList.add('active'); if(b.dataset.tab==='historyTab') loadHistory(); });
+render(); loadHistory();
+</script>
+</body>
+</html>
